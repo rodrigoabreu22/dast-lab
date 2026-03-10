@@ -1,0 +1,51 @@
+name: Continuous DAST Pipeline (OWASP ZAP)
+
+# Trigger the workflow on pushes to the main branch or manual dispatch
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    name: ZAP DAST Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Download the code from the repository
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. Start the Target Application (Juice Shop)
+      # We run this in detached mode (-d) so the pipeline can continue to the next step
+      - name: Start Juice Shop Container
+        run: |
+          docker compose up -d juice-shop
+          
+      # 3. Wait for the Application to be Healthy
+      # Since Juice Shop can take a few seconds to start, we must wait before attacking it
+      - name: Wait for Target Application
+        run: |
+          echo "Waiting for Juice Shop to become healthy..."
+          while ! curl -s http://localhost:3000 > /dev/null; do
+            echo "Waiting..."
+            sleep 5
+          done
+          echo "Juice Shop is UP!"
+
+      # 4. Run the ZAP Scanner using docker compose
+      # This reuses the exact same zap-plan.yaml you created in Exercises 1 and 2!
+      - name: Run ZAP DAST Scan
+        run: |
+          docker compose up zap-scanner
+          
+      # 5. Save the Vulnerability Report
+      # GitHub Actions destroys the virtual machine when finished. 
+      # We must upload the generated HTML report as an "Artifact" so we can download it later.
+      - name: Upload ZAP Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dast-zap-report
+          path: zap-reports/zap-report.html
+          retention-days: 7
