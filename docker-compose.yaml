@@ -1,0 +1,35 @@
+services:
+  # 1. The Target Application (Vulnerable)
+  juice-shop:
+    image: bkimminich/juice-shop:latest
+    container_name: juice-shop
+    ports:
+      - "3000:3000"
+    networks:
+      - dast-network
+    # Healthcheck to ensure Juice Shop is ready to receive traffic before ZAP starts
+    healthcheck:
+      test: [ "CMD", "/nodejs/bin/node", "-e", "fetch('http://localhost:3000/').then(r => process.exit(r.status === 200 ? 0 : 1))" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  # 2. The DAST Scanner (OWASP ZAP)
+  zap-scanner:
+    image: zaproxy/zap-stable:latest
+    container_name: zap-scanner
+    depends_on:
+      juice-shop:
+        condition: service_healthy
+
+    # Map the local folder for the container to read the plan and save the report
+    volumes:
+      - ./zap-reports:/zap/wrk/:rw
+    user: "0:0" # Run as root to avoid permission issues when writing the report
+    # Run ZAP in 'headless' mode using our YAML plan
+    command: zap.sh -cmd -autorun /zap/wrk/zap-plan.yaml
+    networks:
+      - dast-network
+      
+networks:
+  dast-network:
+    driver: bridge

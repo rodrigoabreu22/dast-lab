@@ -1,0 +1,67 @@
+env:
+  contexts:
+  - name: "juice-shop"
+    urls:
+    - "http://juice-shop:3000"
+    includePaths: []
+    # Tell ZAP to NEVER scan or click on the logout path to avoid losing the session
+    excludePaths: 
+    - "http://juice-shop:3000/rest/user/logout"
+    
+    # Define Authentication Strategy (Juice Shop uses JSON authentication)
+    authentication:
+      method: "json"
+      parameters:
+        loginPageUrl: "http://juice-shop:3000/#/login"
+        loginRequestUri: "http://juice-shop:3000/rest/user/login"
+        loginRequestBody: '{"email":"{%username%}","password":"{%password%}"}'
+      # How ZAP verifies if the login was successful by looking at the response body
+      verification:
+        method: "response"
+        loggedOutRegex: "401 Unauthorized"
+        loggedInRegex: ".*token.*"
+        
+    # Define the Users
+    users:
+    - name: "admin-user"
+      credentials:
+        # Default Juice Shop admin credentials
+        username: "admin@juice-sh.op"
+        password: "admin123"
+
+jobs:
+  # Step 1: Discover pages in the application (Spider)
+  - type: spider
+    parameters:
+      context: "juice-shop"
+      user: "admin-user"  # <-- Tell the Spider to run as Admin!
+      url: "http://juice-shop:3000"
+      maxDuration: 1
+
+  - type: activeScan
+    parameters:
+      context: "juice-shop"
+      user: "admin-user"  # <-- Tell the Active Scanner to also run as Admin!
+      # Don't let the active scan run forever! Limit each rule to 1 minute
+      maxRuleDurationInMins: 1
+      # Limit the ENTIRE active scan to 2 minutes for classroom efficiency
+      maxScanDurationInMins: 2
+    policyDefinition:
+      # Set the overall intensity of the scan (Low, Medium, High, Insane)
+      defaultStrength: Low
+      # Set how easily ZAP will report a vulnerability (Low, Medium, High)
+      defaultThreshold: Medium
+
+  # Step 3: Generate a readable HTML report
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk
+      reportFile: zap-report.html
+      reportTitle: "ZAP Automation Framework Report"
+  - type: report
+    parameters:
+      template: risk-confidence-html
+      reportDir: /zap/wrk
+      reportFile: risk-report.html
+      reportTitle: "ZAP Risk/Confidence Report"
